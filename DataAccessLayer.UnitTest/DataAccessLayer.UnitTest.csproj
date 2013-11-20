@@ -52,15 +52,22 @@
   </Choose>
   <ItemGroup>
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="ExecuteScalar.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\DataAccessLayer.Entities\DataAccessLayer.Entities.csproj">
+      <Project>{6397f5af-35ae-4b6b-b378-808a450bdc52}</Project>
+      <Name>DataAccessLayer.Entities</Name>
+    </ProjectReference>
     <ProjectReference Include="..\DataAccessLayer\DataAccessLayer.Core.csproj">
       <Project>{1cc2390c-09eb-4671-9701-62b7b40ef0c3}</Project>
       <Name>DataAccessLayer.Core</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\DataAcessLayer.Services\DataAccessLayer.Services.csproj">
+      <Project>{5bdfc377-5d20-49a7-8be5-9c4852987c66}</Project>
+      <Name>DataAccessLayer.Services</Name>
     </ProjectReference>
   </ItemGroup>
   <Choose>

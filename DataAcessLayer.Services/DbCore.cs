@@ -1,4 +1,5 @@
-﻿using Microsoft.Practices.EnterpriseLibrary.Data;
+﻿using DataAccessLayer.Core;
+using Microsoft.Practices.EnterpriseLibrary.Data;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -7,14 +8,14 @@ using System.Data.Common;
 using System.Linq;
 using System.Threading.Tasks;
 
-namespace DataAccessLayer.Core
+namespace DataAccessLayer.Services.Core
 {
-    public sealed class DbCore : IDbCore
+    sealed class DbCore : IDbCore
     {
         private readonly Database _db;
         private readonly DbConnection connection;
+        private readonly IList<string> _commands;
         private DbTransaction transaction;
-        private IDictionary<string, DbParameters> commands;
 
         static DbCore()
         {
@@ -24,18 +25,20 @@ namespace DataAccessLayer.Core
         public DbCore()
         {
             _db = DatabaseFactory.CreateDatabase();
+            _commands = new List<string>();
             connection = _db.CreateConnection();
         }
 
         public DbCore(string name)
         {
             _db = DatabaseFactory.CreateDatabase(name);
+            _commands = new List<string>();
             connection = _db.CreateConnection();
         }
 
         public T ExecuteScalar<T>(string procedure, DbParameters parameters)
         {
-            var command = GetCommand(procedure, parameters);
+            var command = PrepareCommand(procedure, parameters);
             return (T)DoExecuteScalar(command);
         }
 
@@ -48,7 +51,7 @@ namespace DataAccessLayer.Core
         {
             var mapper = MapBuilder<T>.BuildAllProperties();
             var list = new List<T>();
-            var command = GetCommand(procedure, parameters);
+            var command = PrepareCommand(procedure, parameters);
             using (var reader = DoExecuteReader(command))
             {
                 while (reader.Read())
@@ -66,7 +69,7 @@ namespace DataAccessLayer.Core
 
         public int ExecuteNonQuery(string procedure, DbParameters parameters)
         {
-            var command = GetCommand(procedure, parameters);
+            var command = PrepareCommand(procedure, parameters);
             return DoExecuteNonQuery(command);
         }
 
@@ -94,7 +97,7 @@ namespace DataAccessLayer.Core
                 transaction = connection.BeginTransaction(isolationLevel);
             else
                 throw new InvalidExpressionException("The connection is broken");
-            commands = new Dictionary<string, DbParameters>();
+            _commands.Clear();
         }
 
         public bool Commit(out Exception exception)
@@ -109,12 +112,11 @@ namespace DataAccessLayer.Core
                 catch (Exception e)
                 {
                     transaction.Rollback();
-                    exception = new Exception(string.Empty, e);
+                    exception = new Exception(String.Join(Environment.NewLine, _commands), e);
                 }
                 finally
                 {
-                    commands.Clear();
-                    commands = null;
+                    _commands.Clear();
                 }
             }
             return exception == null;
@@ -128,14 +130,13 @@ namespace DataAccessLayer.Core
             }
         }
 
-        private DbCommand GetCommand(string procedure, DbParameters parameters)
+        private DbCommand PrepareCommand(string procedure, DbParameters parameters)
         {
             var command = _db.GetStoredProcCommand(procedure);
             if (_db.SupportsParemeterDiscovery)
                 _db.DiscoverParameters(command);
             SetParameters(command, parameters);
-            if (IsPendingTransaction)
-                commands.Add(procedure, parameters);
+            LogCommand(command);
             return command;
         }
 
@@ -172,5 +173,15 @@ namespace DataAccessLayer.Core
         {
             return IsPendingTransaction ? _db.ExecuteScalar(command, transaction) : _db.ExecuteScalar(command);
         }
+
+        private void LogCommand(DbCommand command)
+        {
+            if (IsPendingTransaction)
+                _commands.Add(Unwrap(command));
+        }
+
+        Func<DbCommand, String> Unwrap = command => String.Format("EXECUTE {0} {1}",
+            command.CommandText,
+            String.Join(",", from DbParameter p in command.Parameters select String.Format("{0}={1}", p.ParameterName, p.Value)).TrimEnd(','));
     }
 }
