@@ -77,12 +77,8 @@ namespace DataAccessLayer.Core
 
         public void Dispose()
         {
-            if (IsPendingTransaction)
-                transaction.Rollback();
             if (connection != null)
-                connection.Close();
-            transaction.Dispose();
-            connection.Dispose();
+                connection.Dispose();
         }
 
         public void BeginTransaction()
@@ -141,23 +137,6 @@ namespace DataAccessLayer.Core
             if (IsPendingTransaction)
                 commands.Add(procedure, parameters);
             return command;
-        }
-
-        private void PrepareCommand(DbCommand command, DbConnection connection)
-        {
-            if (command == null) throw new ArgumentNullException("command");
-            if (connection == null) throw new ArgumentNullException("connection");
-
-            command.Connection = connection;
-        }
-
-        private void PrepareCommand(DbCommand command, DbTransaction transaction)
-        {
-            if (command == null) throw new ArgumentNullException("command");
-            if (transaction == null) throw new ArgumentNullException("connection");
-
-            PrepareCommand(command, transaction.Connection);
-            command.Transaction = transaction;
         }
 
         private void SetParameter(DbCommand command, string name, object value)
