@@ -1,11 +1,10 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Data;
+﻿using System.Collections.Generic;
+using System.Data.Common;
 using System.Threading.Tasks;
 
 namespace DataAccessLayer.Core
 {
-    public interface IDbCore : IDisposable
+    public interface IDbCore
     {
         T ExecuteScalar<T>(string procedure, DbParameters parameters);
         Task<T> ExecuteScalarAsync<T>(string procedure, DbParameters parameters);
@@ -13,8 +12,7 @@ namespace DataAccessLayer.Core
         Task<IReadOnlyList<T>> ExecuteReaderAsync<T>(string procedure, DbParameters parameters) where T : new();
         int ExecuteNonQuery(string procedure, DbParameters parameters);
         Task<int> ExecuteNonQueryAsync(string procedure, DbParameters parameters);
-        void BeginTransaction();
-        void BeginTransaction(IsolationLevel isolationLevel);
-        bool Commit(out Exception exception);
+        DbTransaction Transaction { get; set; }
+        IReadOnlyList<string> Commands { get; }
     }
 }

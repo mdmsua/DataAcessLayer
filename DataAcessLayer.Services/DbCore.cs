@@ -13,27 +13,12 @@ namespace DataAccessLayer.Services.Core
     sealed class DbCore : IDbCore
     {
         private readonly Database _db;
-        private readonly DbConnection connection;
-        private readonly IList<string> _commands;
-        private DbTransaction transaction;
+        private readonly IList<string> _commands = new List<string>();
+        private DbTransaction transaction = null;
 
-        static DbCore()
+        public DbCore(Database db)
         {
-            DatabaseFactory.SetDatabaseProviderFactory(new DatabaseProviderFactory(), false);
-        }
-
-        public DbCore()
-        {
-            _db = DatabaseFactory.CreateDatabase();
-            _commands = new List<string>();
-            connection = _db.CreateConnection();
-        }
-
-        public DbCore(string name)
-        {
-            _db = DatabaseFactory.CreateDatabase(name);
-            _commands = new List<string>();
-            connection = _db.CreateConnection();
+            _db = db;
         }
 
         public T ExecuteScalar<T>(string procedure, DbParameters parameters)
@@ -49,17 +34,17 @@ namespace DataAccessLayer.Services.Core
 
         public IReadOnlyList<T> ExecuteReader<T>(string procedure, DbParameters parameters) where T : new()
         {
+            var rows = new List<T>();
             var mapper = MapBuilder<T>.BuildAllProperties();
-            var list = new List<T>();
             var command = PrepareCommand(procedure, parameters);
             using (var reader = DoExecuteReader(command))
             {
                 while (reader.Read())
                 {
-                    list.Add(mapper.MapRow(reader));
+                    rows.Add(mapper.MapRow(reader));
                 }
             }
-            return new ReadOnlyCollection<T>(list);
+            return new ReadOnlyCollection<T>(rows);
         }
 
         public Task<IReadOnlyList<T>> ExecuteReaderAsync<T>(string procedure, DbParameters parameters) where T : new()
@@ -78,55 +63,33 @@ namespace DataAccessLayer.Services.Core
             throw new NotImplementedException();
         }
 
-        public void Dispose()
+        public DbTransaction Transaction
         {
-            if (connection != null)
-                connection.Dispose();
-        }
-
-        public void BeginTransaction()
-        {
-            BeginTransaction(IsolationLevel.Serializable);
-        }
-
-        public void BeginTransaction(IsolationLevel isolationLevel)
-        {
-            if (transaction != null)
-                throw new InvalidOperationException("The transaction is already in progress");
-            if (connection.State == ConnectionState.Open)
-                transaction = connection.BeginTransaction(isolationLevel);
-            else
-                throw new InvalidExpressionException("The connection is broken");
-            _commands.Clear();
-        }
-
-        public bool Commit(out Exception exception)
-        {
-            exception = null;
-            if (transaction != null)
+            get
             {
-                try
-                {
-                    transaction.Commit();
-                }
-                catch (Exception e)
-                {
-                    transaction.Rollback();
-                    exception = new Exception(String.Join(Environment.NewLine, _commands), e);
-                }
-                finally
-                {
-                    _commands.Clear();
-                }
+                return transaction;
             }
-            return exception == null;
+            set
+            {
+                if (transaction != null) throw new InvalidOperationException();
+                transaction = value;
+                _commands.Clear();
+            }
+        }
+
+        public IReadOnlyList<string> Commands
+        {
+            get
+            {
+                return new ReadOnlyCollection<string>(_commands);
+            }
         }
 
         private bool IsPendingTransaction
         {
             get
             {
-                return transaction != null;
+                return Transaction != null;
             }
         }
 

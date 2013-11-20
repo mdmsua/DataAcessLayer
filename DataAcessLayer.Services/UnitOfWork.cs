@@ -1,7 +1,9 @@
 ﻿using DataAccessLayer.Core;
 using DataAccessLayer.Services.Core;
+using Microsoft.Practices.EnterpriseLibrary.Data;
 using System;
 using System.Data;
+using System.Data.Common;
 
 namespace DataAccessLayer.Services
 {
@@ -9,40 +11,61 @@ namespace DataAccessLayer.Services
     {
         private readonly IDbCore _dbCore;
 
+        private readonly DbConnection _dbConnection;
+
         private IHumanResources humanResources;
 
         private IScalar scalar;
 
+        static UnitOfWork()
+        {
+            DatabaseFactory.SetDatabaseProviderFactory(new DatabaseProviderFactory(), false);
+        }
+
         public UnitOfWork()
         {
-            _dbCore = new DbCore();
+            var db = DatabaseFactory.CreateDatabase();
+            _dbConnection = db.CreateConnection();
+            _dbCore = new DbCore(db);
         }
 
         public UnitOfWork(string name)
         {
-            _dbCore = new DbCore(name);
+            var db = DatabaseFactory.CreateDatabase(name);
+            _dbConnection = db.CreateConnection();
+            _dbCore = new DbCore(db);
         }
         
         public void BeginTransaction()
         {
-            _dbCore.BeginTransaction();
+            _dbCore.Transaction = _dbConnection.BeginTransaction();
         }
-
         public void BeginTransaction(IsolationLevel isolationLevel)
         {
-            _dbCore.BeginTransaction(isolationLevel);
+            _dbCore.Transaction = _dbConnection.BeginTransaction(isolationLevel);
         }
-        
+
         public bool Commit(out Exception exception)
         {
             exception = null;
-            
+            if (_dbCore.Transaction != null)
+            {
+                try
+                {
+                    _dbCore.Transaction.Commit();
+                }
+                catch (Exception e)
+                {
+                    _dbCore.Transaction.Rollback();
+                    exception = new Exception(String.Join(Environment.NewLine, _dbCore.Commands), e);
+                }
+            }
             return exception == null;
         }
-
+        
         public void Dispose()
         {
-            throw new NotImplementedException();
+            _dbConnection.Dispose();
         }
 
         public IHumanResources HumanResources
