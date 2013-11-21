@@ -3,7 +3,6 @@ using Microsoft.Practices.EnterpriseLibrary.Data;
 using Microsoft.Practices.EnterpriseLibrary.Data.Sql;
 using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
 using System.Data;
 using System.Data.Common;
 using System.Linq;
@@ -31,12 +30,12 @@ namespace DataAccessLayer.Services.Core
             throw new NotImplementedException();
         }
 
-        public IReadOnlyList<T> ExecuteReader<T>(string procedure, DbParameters parameters) where T : new()
+        public IList<T> ExecuteReader<T>(string procedure, DbParameters parameters) where T : new()
         {
-            return new ReadOnlyCollection<T>(_db.ExecuteSprocAccessor<T>(procedure, parameters.Values).ToList());
+            return new List<T>(_db.ExecuteSprocAccessor<T>(procedure, parameters.Values));
         }
 
-        public Task<IReadOnlyList<T>> ExecuteReaderAsync<T>(string procedure, DbParameters parameters) where T : new()
+        public Task<IList<T>> ExecuteReaderAsync<T>(string procedure, DbParameters parameters) where T : new()
         {
             throw new NotImplementedException();
         }
