@@ -9,9 +9,9 @@ namespace DataAccessLayer.Services
 {
     public interface IUnitOfWork : IDisposable
     {
-        void BeginTransaction();
-        void BeginTransaction(IsolationLevel isolationLevel);
-        bool Commit(out Exception exception);
+        void UseTransaction();
+        void UseTransaction(IsolationLevel isolationLevel);
+        bool TryCommit(out Exception exception);
 
         IHumanResources HumanResources { get; }
         IScalar Scalar { get; }

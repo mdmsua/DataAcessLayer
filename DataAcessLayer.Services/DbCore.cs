@@ -1,5 +1,6 @@
 ﻿using DataAccessLayer.Core;
 using Microsoft.Practices.EnterpriseLibrary.Data;
+using Microsoft.Practices.EnterpriseLibrary.Data.Sql;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -10,13 +11,11 @@ using System.Threading.Tasks;
 
 namespace DataAccessLayer.Services.Core
 {
-    sealed class DbCore : IDbCore
+    sealed class DbCore : TransactionManager, IDbCore
     {
-        private readonly Database _db;
-        private readonly IList<string> _commands = new List<string>();
-        private DbTransaction transaction = null;
+        private readonly SqlDatabase _db;
 
-        public DbCore(Database db)
+        public DbCore(SqlDatabase db)
         {
             _db = db;
         }
@@ -34,17 +33,7 @@ namespace DataAccessLayer.Services.Core
 
         public IReadOnlyList<T> ExecuteReader<T>(string procedure, DbParameters parameters) where T : new()
         {
-            var rows = new List<T>();
-            var mapper = MapBuilder<T>.BuildAllProperties();
-            var command = PrepareCommand(procedure, parameters);
-            using (var reader = DoExecuteReader(command))
-            {
-                while (reader.Read())
-                {
-                    rows.Add(mapper.MapRow(reader));
-                }
-            }
-            return new ReadOnlyCollection<T>(rows);
+            return new ReadOnlyCollection<T>(_db.ExecuteSprocAccessor<T>(procedure, parameters.Values).ToList());
         }
 
         public Task<IReadOnlyList<T>> ExecuteReaderAsync<T>(string procedure, DbParameters parameters) where T : new()
@@ -61,36 +50,6 @@ namespace DataAccessLayer.Services.Core
         public Task<int> ExecuteNonQueryAsync(string procedure, DbParameters parameters)
         {
             throw new NotImplementedException();
-        }
-
-        public DbTransaction Transaction
-        {
-            get
-            {
-                return transaction;
-            }
-            set
-            {
-                if (transaction != null) throw new InvalidOperationException();
-                transaction = value;
-                _commands.Clear();
-            }
-        }
-
-        public IReadOnlyList<string> Commands
-        {
-            get
-            {
-                return new ReadOnlyCollection<string>(_commands);
-            }
-        }
-
-        private bool IsPendingTransaction
-        {
-            get
-            {
-                return Transaction != null;
-            }
         }
 
         private DbCommand PrepareCommand(string procedure, DbParameters parameters)
@@ -124,23 +83,23 @@ namespace DataAccessLayer.Services.Core
 
         private IDataReader DoExecuteReader(DbCommand command)
         {
-            return IsPendingTransaction ? _db.ExecuteReader(command, transaction) : _db.ExecuteReader(command);
+            return IsPendingTransaction ? _db.ExecuteReader(command, Transaction) : _db.ExecuteReader(command);
         }
 
         private int DoExecuteNonQuery(DbCommand command)
         {
-            return IsPendingTransaction ? _db.ExecuteNonQuery(command, transaction) : _db.ExecuteNonQuery(command);
+            return IsPendingTransaction ? _db.ExecuteNonQuery(command, Transaction) : _db.ExecuteNonQuery(command);
         }
 
         private object DoExecuteScalar(DbCommand command)
         {
-            return IsPendingTransaction ? _db.ExecuteScalar(command, transaction) : _db.ExecuteScalar(command);
+            return IsPendingTransaction ? _db.ExecuteScalar(command, Transaction) : _db.ExecuteScalar(command);
         }
 
         private void LogCommand(DbCommand command)
         {
             if (IsPendingTransaction)
-                _commands.Add(Unwrap(command));
+                Statements.Add(Unwrap(command));
         }
 
         Func<DbCommand, String> Unwrap = command => String.Format("EXECUTE {0} {1}",

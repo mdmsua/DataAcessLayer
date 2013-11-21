@@ -12,7 +12,5 @@ namespace DataAccessLayer.Core
         Task<IReadOnlyList<T>> ExecuteReaderAsync<T>(string procedure, DbParameters parameters) where T : new();
         int ExecuteNonQuery(string procedure, DbParameters parameters);
         Task<int> ExecuteNonQueryAsync(string procedure, DbParameters parameters);
-        DbTransaction Transaction { get; set; }
-        IReadOnlyList<string> Commands { get; }
     }
 }

@@ -1,6 +1,6 @@
-﻿using DataAccessLayer.Core;
-using DataAccessLayer.Services.Core;
+﻿using DataAccessLayer.Services.Core;
 using Microsoft.Practices.EnterpriseLibrary.Data;
+using Microsoft.Practices.EnterpriseLibrary.Data.Sql;
 using System;
 using System.Data;
 using System.Data.Common;
@@ -9,9 +9,11 @@ namespace DataAccessLayer.Services
 {
     sealed class UnitOfWork : IUnitOfWork
     {
-        private readonly IDbCore _dbCore;
+        private readonly DbCore _dbCore;
 
         private readonly DbConnection _dbConnection;
+
+        private DbTransaction transaction;
 
         private IHumanResources humanResources;
 
@@ -24,40 +26,47 @@ namespace DataAccessLayer.Services
 
         public UnitOfWork()
         {
-            var db = DatabaseFactory.CreateDatabase();
+            var db = DatabaseFactory.CreateDatabase() as SqlDatabase;
             _dbConnection = db.CreateConnection();
             _dbCore = new DbCore(db);
         }
 
         public UnitOfWork(string name)
         {
-            var db = DatabaseFactory.CreateDatabase(name);
+            var db = DatabaseFactory.CreateDatabase(name) as SqlDatabase;
             _dbConnection = db.CreateConnection();
             _dbCore = new DbCore(db);
         }
         
-        public void BeginTransaction()
+        public void UseTransaction()
         {
-            _dbCore.Transaction = _dbConnection.BeginTransaction();
-        }
-        public void BeginTransaction(IsolationLevel isolationLevel)
-        {
-            _dbCore.Transaction = _dbConnection.BeginTransaction(isolationLevel);
+            transaction = _dbConnection.BeginTransaction();
+            _dbCore.Begin(transaction);
         }
 
-        public bool Commit(out Exception exception)
+        public void UseTransaction(IsolationLevel isolationLevel)
+        {
+            transaction = _dbConnection.BeginTransaction(isolationLevel);
+            _dbCore.Begin(transaction);
+        }
+
+        public bool TryCommit(out Exception exception)
         {
             exception = null;
-            if (_dbCore.Transaction != null)
+            if (transaction != null)
             {
                 try
                 {
-                    _dbCore.Transaction.Commit();
+                    transaction.Commit();
                 }
                 catch (Exception e)
                 {
-                    _dbCore.Transaction.Rollback();
+                    transaction.Rollback();
                     exception = new Exception(String.Join(Environment.NewLine, _dbCore.Commands), e);
+                }
+                finally
+                {
+                    transaction.Dispose();
                 }
             }
             return exception == null;
