@@ -1,5 +1,4 @@
-﻿using System.Collections.Generic;
-using System.Threading.Tasks;
+﻿using System.Threading.Tasks;
 
 namespace DataAccessLayer.Core
 {
@@ -7,8 +6,8 @@ namespace DataAccessLayer.Core
     {
         T ExecuteScalar<T>(string procedure, DbParameters parameters);
         Task<T> ExecuteScalarAsync<T>(string procedure, DbParameters parameters);
-        IList<T> ExecuteReader<T>(string procedure, DbParameters parameters) where T : new();
-        Task<IList<T>> ExecuteReaderAsync<T>(string procedure, DbParameters parameters) where T : new();
+        T[] ExecuteReader<T>(string procedure, DbParameters parameters) where T : new();
+        Task<T[]> ExecuteReaderAsync<T>(string procedure, DbParameters parameters) where T : new();
         int ExecuteNonQuery(string procedure, DbParameters parameters);
         Task<int> ExecuteNonQueryAsync(string procedure, DbParameters parameters);
     }

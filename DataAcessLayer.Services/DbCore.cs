@@ -27,17 +27,22 @@ namespace DataAccessLayer.Services.Core
 
         public Task<T> ExecuteScalarAsync<T>(string procedure, DbParameters parameters)
         {
-            throw new NotImplementedException();
+            var command = PrepareCommand(procedure, parameters);
+            if (_db.SupportsAsync)
+                return DoExecuteScalarAsync(command).ContinueWith(t => (T)t.Result);
+            return Task.FromResult((T)DoExecuteScalar(command));
         }
 
-        public IList<T> ExecuteReader<T>(string procedure, DbParameters parameters) where T : new()
+        public T[] ExecuteReader<T>(string procedure, DbParameters parameters) where T : new()
         {
-            return new List<T>(_db.ExecuteSprocAccessor<T>(procedure, parameters.Values));
+            return _db.ExecuteSprocAccessor<T>(procedure, parameters.Values).ToArray();
         }
 
-        public Task<IList<T>> ExecuteReaderAsync<T>(string procedure, DbParameters parameters) where T : new()
+        public Task<T[]> ExecuteReaderAsync<T>(string procedure, DbParameters parameters) where T : new()
         {
-            throw new NotImplementedException();
+            if (!_db.SupportsAsync) return Task.FromResult(ExecuteReader<T>(procedure, parameters));
+            var accessor = _db.CreateSprocAccessor<T>(procedure);
+            return Task.Factory.FromAsync<IEnumerable<T>>(accessor.BeginExecute(callback => { }, null, parameters.Values.ToArray()), accessor.EndExecute).ContinueWith(t => t.Result.ToArray());
         }
 
         public int ExecuteNonQuery(string procedure, DbParameters parameters)
@@ -48,7 +53,9 @@ namespace DataAccessLayer.Services.Core
 
         public Task<int> ExecuteNonQueryAsync(string procedure, DbParameters parameters)
         {
-            throw new NotImplementedException();
+            if (!_db.SupportsAsync) return Task.FromResult(ExecuteNonQuery(procedure, parameters));
+            var command = PrepareCommand(procedure, parameters);
+            return DoExecuteNonQueryAsync(command);
         }
 
         private DbCommand PrepareCommand(string procedure, DbParameters parameters)
@@ -93,6 +100,27 @@ namespace DataAccessLayer.Services.Core
         private object DoExecuteScalar(DbCommand command)
         {
             return IsPendingTransaction ? _db.ExecuteScalar(command, Transaction) : _db.ExecuteScalar(command);
+        }
+
+        private Task<IDataReader> DoExecuteReaderAsync(DbCommand command)
+        {
+            return IsPendingTransaction ? 
+                Task<IDataReader>.Factory.FromAsync<DbCommand, DbTransaction>(_db.BeginExecuteReader, _db.EndExecuteReader, command, Transaction, null) : 
+                Task<IDataReader>.Factory.FromAsync<DbCommand>(_db.BeginExecuteReader, _db.EndExecuteReader, command, null);
+        }
+
+        private Task<int> DoExecuteNonQueryAsync(DbCommand command)
+        {
+            return IsPendingTransaction ? 
+                Task<int>.Factory.FromAsync<DbCommand, DbTransaction>(_db.BeginExecuteNonQuery, _db.EndExecuteNonQuery, command, Transaction, null) :
+                Task<int>.Factory.FromAsync<DbCommand>(_db.BeginExecuteNonQuery, _db.EndExecuteNonQuery, command, null);
+        }
+
+        private Task<object> DoExecuteScalarAsync(DbCommand command)
+        {
+            return IsPendingTransaction ? 
+                Task<object>.Factory.FromAsync<DbCommand, DbTransaction>(_db.BeginExecuteScalar, _db.EndExecuteScalar, command, Transaction, null) : 
+                Task<object>.Factory.FromAsync<DbCommand>(_db.BeginExecuteScalar, _db.EndExecuteScalar, command, null);
         }
 
         private void LogCommand(DbCommand command)

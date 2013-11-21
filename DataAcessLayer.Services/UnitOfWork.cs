@@ -7,7 +7,7 @@ using System.Data.Common;
 
 namespace DataAccessLayer.Services
 {
-    sealed class UnitOfWork : IUnitOfWork
+    public sealed class UnitOfWork : IUnitOfWork
     {
         private readonly DbCore _dbCore;
 
