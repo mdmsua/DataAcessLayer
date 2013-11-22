@@ -51,7 +51,7 @@
     </Otherwise>
   </Choose>
   <ItemGroup>
-    <Compile Include="BillOfMaterials.cs" />
+    <Compile Include="Read.cs" />
     <Compile Include="Scalar.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>

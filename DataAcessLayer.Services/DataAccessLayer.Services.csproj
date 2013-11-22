@@ -48,7 +48,9 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="DbCore.cs" />
+    <Compile Include="Dbo.cs" />
     <Compile Include="HumanResources.cs" />
+    <Compile Include="IDbo.cs" />
     <Compile Include="IHumanResources.cs" />
     <Compile Include="IScalar.cs" />
     <Compile Include="IUnitOfWork.cs" />

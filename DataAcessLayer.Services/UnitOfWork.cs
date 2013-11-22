@@ -19,6 +19,8 @@ namespace DataAccessLayer.Services
 
         private IScalar scalar;
 
+        private IDbo dbo;
+
         static UnitOfWork()
         {
             DatabaseFactory.SetDatabaseProviderFactory(new DatabaseProviderFactory(), false);
@@ -94,6 +96,16 @@ namespace DataAccessLayer.Services
                 if (scalar == null)
                     scalar = new Scalar(_dbCore);
                 return scalar;
+            }
+        }
+
+        public IDbo Dbo
+        {
+            get
+            {
+                if (dbo == null)
+                    dbo = new Dbo(_dbCore);
+                return dbo;
             }
         }
     }

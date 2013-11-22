@@ -1,7 +1,7 @@
 ﻿
-namespace DataAccessLayer.Tests
+namespace DataAccessLayer.Entities
 {
-    class BillOfMaterials
+    public class BillOfMaterials
     {
         public int ProductAssemblyID { get; set; }
 
