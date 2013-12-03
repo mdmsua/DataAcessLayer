@@ -35,7 +35,7 @@ namespace DataAccessLayer.Services.Core
 
         public T[] ExecuteReader<T>(string procedure, DbParameters parameters) where T : new()
         {
-            return _db.ExecuteSprocAccessor<T>(procedure, parameters.Values).ToArray();
+            return _db.ExecuteSprocAccessor<T>(procedure, parameters.Values.ToArray()).ToArray();
         }
 
         public Task<T[]> ExecuteReaderAsync<T>(string procedure, DbParameters parameters) where T : new()
