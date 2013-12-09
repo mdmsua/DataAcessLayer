@@ -1,4 +1,5 @@
-﻿using System;
+﻿using DataAccessLayer.Core;
+using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Linq;
@@ -9,8 +10,8 @@ namespace DataAccessLayer.Services
 {
     public interface IUnitOfWork : IDisposable
     {
-        void UseTransaction();
-        void UseTransaction(IsolationLevel isolationLevel);
+        ITransactionManager UseTransaction();
+        ITransactionManager UseTransaction(IsolationLevel isolationLevel);
         bool TryCommit(out Exception exception);
 
         IHumanResources HumanResources { get; }

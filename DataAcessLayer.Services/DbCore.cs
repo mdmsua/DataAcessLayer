@@ -35,12 +35,14 @@ namespace DataAccessLayer.Services.Core
 
         public T[] ExecuteReader<T>(string procedure, DbParameters parameters) where T : new()
         {
+            LogCommand(procedure, parameters);            
             return _db.ExecuteSprocAccessor<T>(procedure, parameters.Values.ToArray()).ToArray();
         }
 
         public Task<T[]> ExecuteReaderAsync<T>(string procedure, DbParameters parameters) where T : new()
         {
             if (!_db.SupportsAsync) return Task.FromResult(ExecuteReader<T>(procedure, parameters));
+            LogCommand(procedure, parameters);
             var accessor = _db.CreateSprocAccessor<T>(procedure);
             return Task.Factory.FromAsync<IEnumerable<T>>(accessor.BeginExecute(callback => { }, null, parameters.Values.ToArray()), accessor.EndExecute).ContinueWith(t => t.Result.ToArray());
         }
@@ -68,6 +70,11 @@ namespace DataAccessLayer.Services.Core
             return command;
         }
 
+        private void SetParameters(DbCommand command, IReadOnlyDictionary<string, object> parameters)
+        {
+            parameters.ToList().ForEach(p => SetParameter(command, p.Key, p.Value));
+        }
+
         private void SetParameter(DbCommand command, string name, object value)
         {
             var procParamName = _db.BuildParameterName(name);
@@ -80,11 +87,6 @@ namespace DataAccessLayer.Services.Core
                 else
                     throw new Exception();// ParameterTypeException(command.CommandText, procParamName, destDbType.ToString(), srcDbType.ToString());
             }
-        }
-
-        private void SetParameters(DbCommand command, IReadOnlyDictionary<string, object> parameters)
-        {
-            parameters.ToList().ForEach(p => SetParameter(command, p.Key, p.Value));
         }
 
         private IDataReader DoExecuteReader(DbCommand command)
@@ -126,11 +128,21 @@ namespace DataAccessLayer.Services.Core
         private void LogCommand(DbCommand command)
         {
             if (IsPendingTransaction)
-                Statements.Add(Unwrap(command));
+                Commands.Enqueue(UnwrapCommand(command));
         }
 
-        Func<DbCommand, String> Unwrap = command => String.Format("EXECUTE {0} {1}",
+        Func<DbCommand, String> UnwrapCommand = command => String.Format("EXECUTE {0} {1}",
             command.CommandText,
             String.Join(",", from DbParameter p in command.Parameters select String.Format("{0}={1}", p.ParameterName, p.Value)).TrimEnd(','));
+
+        private void LogCommand(string procedure, DbParameters parameters)
+        {
+            if (IsPendingTransaction)
+                Commands.Enqueue(Unwrap(procedure, parameters));
+        }
+
+        Func<String, DbParameters, String> Unwrap = (procedure, parameters) => String.Format("EXECUTE {0} {1}",
+            procedure,
+            String.Join(",", from p in parameters select p.Value).TrimEnd(','));
     }
 }

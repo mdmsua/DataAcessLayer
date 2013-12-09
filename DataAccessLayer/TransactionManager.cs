@@ -1,21 +1,21 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Collections.ObjectModel;
-using System.Data;
+using System.Collections.Concurrent;
 using System.Data.Common;
-using System.Data.SqlClient;
+using System.Threading;
 
 namespace DataAccessLayer.Core
 {
-    public abstract class TransactionManager
+    public abstract class TransactionManager : ITransactionManager
     {
         protected DbTransaction Transaction { get; private set; }
 
-        protected IList<string> Statements;
+        protected ConcurrentQueue<string> Commands { get; private set; }
+
+        private readonly Object _lock = new object();
 
         protected TransactionManager()
         {
-            Statements = new List<string>();
+            Commands = new ConcurrentQueue<string>();
         }
 
         protected bool IsPendingTransaction
@@ -25,19 +25,29 @@ namespace DataAccessLayer.Core
                 return Transaction != null;
             }
         }
-        
-        public void Begin(DbTransaction transaction)
-        {
-            Transaction = transaction;
-            Statements.Clear();
-        }
 
-        public IReadOnlyList<string> Commands
+        public ITransactionManager Begin(DbTransaction transaction)
         {
-            get
+            if (Monitor.TryEnter(_lock))
             {
-                return new ReadOnlyCollection<string>(Statements);
+                if (!IsPendingTransaction)
+                {
+                    try
+                    {
+                        string result;
+                        while (!Commands.IsEmpty)
+                        {
+                            Commands.TryDequeue(out result);
+                        }
+                        Transaction = transaction;
+                    }
+                    finally
+                    {
+                        Monitor.Exit(_lock);
+                    }
+                }
             }
+            return this;
         }
 
         /*
@@ -58,6 +68,16 @@ namespace DataAccessLayer.Core
             }
         }
         */
-        
+
+
+        public string Log
+        {
+            get { return string.Join(Environment.NewLine, Commands); }
+        }
+
+        public void Dispose()
+        {
+            
+        }
     }
 }
