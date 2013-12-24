@@ -10,13 +10,50 @@ using System.Threading.Tasks;
 
 namespace DataAccessLayer.Services.Core
 {
-    sealed class DbCore : TransactionManager, IDbCore
+    sealed class DbCore : IDbCore
     {
         private readonly SqlDatabase _db;
+
+        private DbTransaction transaction;
+
+        internal readonly Queue<string> Commands;
+
+        internal DbTransaction Transaction
+        {
+            private get
+            {
+                lock (this)
+                {
+                    return transaction;
+                }
+            }
+            set
+            {
+                lock (this)
+                {
+                    if (transaction != value)
+                    {
+                        lock (this)
+                        {
+                            transaction = value;
+                        }
+                    }
+                }
+            }
+        }
+
+        Boolean isPendingTransaction
+        {
+            get
+            {
+                return Transaction != null;
+            }
+        }
 
         public DbCore(SqlDatabase db)
         {
             _db = db;
+            Commands = new Queue<string>();
         }
 
         public T ExecuteScalar<T>(string procedure, DbParameters parameters)
@@ -35,7 +72,7 @@ namespace DataAccessLayer.Services.Core
 
         public T[] ExecuteReader<T>(string procedure, DbParameters parameters) where T : new()
         {
-            LogCommand(procedure, parameters);            
+            LogCommand(procedure, parameters);
             return _db.ExecuteSprocAccessor<T>(procedure, parameters.Values.ToArray()).ToArray();
         }
 
@@ -91,43 +128,43 @@ namespace DataAccessLayer.Services.Core
 
         private IDataReader DoExecuteReader(DbCommand command)
         {
-            return IsPendingTransaction ? _db.ExecuteReader(command, Transaction) : _db.ExecuteReader(command);
+            return isPendingTransaction ? _db.ExecuteReader(command, Transaction) : _db.ExecuteReader(command);
         }
 
         private int DoExecuteNonQuery(DbCommand command)
         {
-            return IsPendingTransaction ? _db.ExecuteNonQuery(command, Transaction) : _db.ExecuteNonQuery(command);
+            return isPendingTransaction ? _db.ExecuteNonQuery(command, Transaction) : _db.ExecuteNonQuery(command);
         }
 
         private object DoExecuteScalar(DbCommand command)
         {
-            return IsPendingTransaction ? _db.ExecuteScalar(command, Transaction) : _db.ExecuteScalar(command);
+            return isPendingTransaction ? _db.ExecuteScalar(command, Transaction) : _db.ExecuteScalar(command);
         }
 
         private Task<IDataReader> DoExecuteReaderAsync(DbCommand command)
         {
-            return IsPendingTransaction ? 
-                Task<IDataReader>.Factory.FromAsync<DbCommand, DbTransaction>(_db.BeginExecuteReader, _db.EndExecuteReader, command, Transaction, null) : 
+            return isPendingTransaction ?
+                Task<IDataReader>.Factory.FromAsync<DbCommand, DbTransaction>(_db.BeginExecuteReader, _db.EndExecuteReader, command, Transaction, null) :
                 Task<IDataReader>.Factory.FromAsync<DbCommand>(_db.BeginExecuteReader, _db.EndExecuteReader, command, null);
         }
 
         private Task<int> DoExecuteNonQueryAsync(DbCommand command)
         {
-            return IsPendingTransaction ? 
+            return isPendingTransaction ?
                 Task<int>.Factory.FromAsync<DbCommand, DbTransaction>(_db.BeginExecuteNonQuery, _db.EndExecuteNonQuery, command, Transaction, null) :
                 Task<int>.Factory.FromAsync<DbCommand>(_db.BeginExecuteNonQuery, _db.EndExecuteNonQuery, command, null);
         }
 
         private Task<object> DoExecuteScalarAsync(DbCommand command)
         {
-            return IsPendingTransaction ? 
-                Task<object>.Factory.FromAsync<DbCommand, DbTransaction>(_db.BeginExecuteScalar, _db.EndExecuteScalar, command, Transaction, null) : 
+            return isPendingTransaction ?
+                Task<object>.Factory.FromAsync<DbCommand, DbTransaction>(_db.BeginExecuteScalar, _db.EndExecuteScalar, command, Transaction, null) :
                 Task<object>.Factory.FromAsync<DbCommand>(_db.BeginExecuteScalar, _db.EndExecuteScalar, command, null);
         }
 
         private void LogCommand(DbCommand command)
         {
-            if (IsPendingTransaction)
+            if (isPendingTransaction)
                 Commands.Enqueue(UnwrapCommand(command));
         }
 
@@ -137,7 +174,7 @@ namespace DataAccessLayer.Services.Core
 
         private void LogCommand(string procedure, DbParameters parameters)
         {
-            if (IsPendingTransaction)
+            if (isPendingTransaction)
                 Commands.Enqueue(Unwrap(procedure, parameters));
         }
 
