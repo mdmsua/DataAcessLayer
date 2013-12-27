@@ -11,5 +11,6 @@ namespace DataAccessLayer.Services
         IHumanResources HumanResources { get; }
         IScalar Scalar { get; }
         IDbo Dbo { get; }
+        IWriteOnly WriteOnly { get; }
     }
 }

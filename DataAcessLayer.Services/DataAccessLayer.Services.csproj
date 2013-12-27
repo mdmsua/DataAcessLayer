@@ -54,9 +54,11 @@
     <Compile Include="IHumanResources.cs" />
     <Compile Include="IScalar.cs" />
     <Compile Include="IUnitOfWork.cs" />
+    <Compile Include="IWriteOnly.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Scalar.cs" />
     <Compile Include="UnitOfWork.cs" />
+    <Compile Include="WriteOnly.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />

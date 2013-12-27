@@ -12,13 +12,13 @@ namespace DataAccessLayer.Services
 
         private readonly DbConnection _dbConnection;
 
-        private DbTransaction transaction;
-
         private IHumanResources humanResources;
 
         private IScalar scalar;
 
         private IDbo dbo;
+
+        private IWriteOnly write;
 
         static UnitOfWork()
         {
@@ -87,6 +87,17 @@ namespace DataAccessLayer.Services
                 if (dbo == null)
                     dbo = new Dbo(_dbCore);
                 return dbo;
+            }
+        }
+
+
+        public IWriteOnly WriteOnly
+        {
+            get
+            {
+                if (write == null)
+                    write = new WriteOnly(_dbCore);
+                return write;
             }
         }
     }

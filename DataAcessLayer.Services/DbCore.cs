@@ -87,7 +87,8 @@ namespace DataAccessLayer.Services.Core
         public int ExecuteNonQuery(string procedure, DbParameters parameters)
         {
             var command = PrepareCommand(procedure, parameters);
-            return DoExecuteNonQuery(command);
+            var result = DoExecuteNonQuery(command);
+            return result;
         }
 
         public Task<int> ExecuteNonQueryAsync(string procedure, DbParameters parameters)
