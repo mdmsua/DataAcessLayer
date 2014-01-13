@@ -88,6 +88,7 @@ namespace DataAccessLayer.Services.Core
         {
             var command = PrepareCommand(procedure, parameters);
             var result = DoExecuteNonQuery(command);
+            SetOutput(command, parameters);
             return result;
         }
 
@@ -110,20 +111,28 @@ namespace DataAccessLayer.Services.Core
 
         private void SetParameters(DbCommand command, IReadOnlyDictionary<string, object> parameters)
         {
-            parameters.ToList().ForEach(p => SetParameter(command, p.Key, p.Value));
+            foreach (var parameter in parameters)
+            {
+                var parameterName = _db.BuildParameterName(parameter.Key);
+                if (command.Parameters.Contains(parameterName))
+                {
+                    DbType srcDbType, destDbType;
+                    destDbType = command.Parameters[parameterName].DbType;
+                    if (Enum.TryParse<DbType>(parameter.Value.GetType().Name, out srcDbType) && srcDbType == destDbType)
+                        _db.SetParameterValue(command, parameterName, parameter.Value);
+                    else
+                        throw new TypeMismatchException(command.CommandText, parameterName, destDbType.ToString(), srcDbType.ToString());
+                }
+            }
         }
 
-        private void SetParameter(DbCommand command, string name, object value)
+        private void SetOutput(DbCommand command, DbParameters parameters)
         {
-            var procParamName = _db.BuildParameterName(name);
-            if (command.Parameters.Contains(procParamName))
+            foreach (var parameter in parameters.ToList())
             {
-                DbType srcDbType, destDbType;
-                destDbType = command.Parameters[procParamName].DbType;
-                if (Enum.TryParse<DbType>(value.GetType().Name, out srcDbType) && srcDbType == destDbType)
-                    _db.SetParameterValue(command, procParamName, value);
-                else
-                    throw new Exception();// ParameterTypeException(command.CommandText, procParamName, destDbType.ToString(), srcDbType.ToString());
+                var parameterName = _db.BuildParameterName(parameter.Key);
+                if (command.Parameters.Contains(parameterName))
+                    parameters.Set(parameter.Key, command.Parameters[parameterName].Value, true);
             }
         }
 

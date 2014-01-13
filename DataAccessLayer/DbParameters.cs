@@ -11,7 +11,13 @@ namespace DataAccessLayer.Core
 
         private readonly IDictionary<string, object> _dictionary;
 
-        #region ctor
+        #region ctors
+        public DbParameters()
+        {
+            _capacity = int.MaxValue;
+            _dictionary = new Dictionary<string, object>();
+        }
+
         public DbParameters(int capacity)
         {
             _capacity = capacity;
@@ -74,12 +80,26 @@ namespace DataAccessLayer.Core
             return parameters;
         }
 
+        public void To<T>(T entity)
+        {
+            var properties = entity.GetType().GetProperties().Where(p => p.CanWrite).ToList();
+            properties.ForEach(property => TrySetValue(this, property, entity));
+        }
+
         public DbParameters Set(string key, object value)
         {
-            if (ContainsKey(key))
-                _dictionary.Add(key, value);    // throws ArgumentException to prevent overwriting of existing entry
-            if (Count == _capacity)
-                throw new IndexOutOfRangeException(string.Format("Maximum capacity is {0}", _capacity));
+            return Set(key, value, false);
+        }
+
+        public DbParameters Set(string key, object value, bool overwrite)
+        {
+            if (overwrite == false)
+            {
+                if (Count == _capacity)
+                    throw new CapacityException(_capacity);
+                if (ContainsKey(key))
+                    _dictionary.Add(key, value);    // throws ArgumentException to prevent overwriting of existing entry
+            }
             _dictionary[key] = value;
             return this;
         }
@@ -89,6 +109,19 @@ namespace DataAccessLayer.Core
             try
             {
                 parameters.Set(property.Name, property.GetValue(value));
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static bool TrySetValue<T>(DbParameters parameters, PropertyInfo property, T value)
+        {
+            try
+            {
+                property.SetValue(value, parameters[property.Name]);
                 return true;
             }
             catch
