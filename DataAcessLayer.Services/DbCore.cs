@@ -59,7 +59,14 @@ namespace DataAccessLayer.Services.Core
         public T ExecuteScalar<T>(string procedure, DbParameters parameters)
         {
             var command = PrepareCommand(procedure, parameters);
-            return (T)DoExecuteScalar(command);
+            try
+            {
+                return (T)DoExecuteScalar(command);
+            }
+            catch (NullReferenceException)
+            {
+                return default(T);
+            }
         }
 
         public Task<T> ExecuteScalarAsync<T>(string procedure, DbParameters parameters)
