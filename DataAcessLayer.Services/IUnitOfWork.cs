@@ -3,7 +3,7 @@ using System.Data;
 
 namespace DataAccessLayer.Services
 {
-    public interface IUnitOfWork : IDisposable
+    public interface IUnitOfWork
     {
         IDbTransaction BeginTransaction();
         IDbTransaction BeginTransaction(IsolationLevel isolationLevel);

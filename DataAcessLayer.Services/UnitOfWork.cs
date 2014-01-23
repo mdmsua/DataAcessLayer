@@ -2,15 +2,12 @@
 using Microsoft.Practices.EnterpriseLibrary.Data;
 using Microsoft.Practices.EnterpriseLibrary.Data.Sql;
 using System.Data;
-using System.Data.Common;
 
 namespace DataAccessLayer.Services
 {
     public sealed class UnitOfWork : IUnitOfWork
     {
         private readonly DbCore _dbCore;
-
-        private readonly DbConnection _dbConnection;
 
         private IHumanResources humanResources;
 
@@ -29,35 +26,22 @@ namespace DataAccessLayer.Services
         {
             var db = DatabaseFactory.CreateDatabase() as SqlDatabase;
             _dbCore = new DbCore(db);
-            _dbConnection = db.CreateConnection();
-            _dbConnection.Open();
         }
 
         public UnitOfWork(string name)
         {
             var db = DatabaseFactory.CreateDatabase(name) as SqlDatabase;
             _dbCore = new DbCore(db);
-            _dbConnection = db.CreateConnection();
-            _dbConnection.Open();
         }
         
         public IDbTransaction BeginTransaction()
         {
-            var transaction = _dbConnection.BeginTransaction();
-            _dbCore.Transaction = transaction;
-            return transaction;
+            return _dbCore.BeginTransaction();
         }
 
         public IDbTransaction BeginTransaction(IsolationLevel isolationLevel)
         {
-            var transaction = _dbConnection.BeginTransaction(isolationLevel);
-            _dbCore.Transaction = transaction;
-            return transaction;
-        }
-
-        public void Dispose()
-        {
-            _dbConnection.Dispose();
+            return _dbCore.BeginTransaction(isolationLevel);
         }
 
         public IHumanResources HumanResources

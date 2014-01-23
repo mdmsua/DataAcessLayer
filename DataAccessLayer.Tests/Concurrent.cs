@@ -18,13 +18,11 @@ namespace DataAccessLayer.Tests
             var actions = new List<Action>(length);
             actions.AddRange(Enumerable.Range(1, length).Select(i => new Action(() =>
             {
-                using (var uow = new UnitOfWork())
+                var uow = new UnitOfWork();
+                using (var trx = uow.BeginTransaction())
                 {
-                    using (var trx = uow.BeginTransaction())
-                    {
-                        uow.Dbo.GetBillOfMaterials(3, new DateTime(2004, 7, 25));
-                        uow.Scalar.Execute<int>("uspSearchCandidateResumes", DbParameters.Create(1).Set("searchString", "C#"));
-                    }
+                    uow.Dbo.GetBillOfMaterials(3, new DateTime(2004, 7, 25));
+                    uow.Scalar.Execute<int>("uspSearchCandidateResumes", DbParameters.Create(1).Set("searchString", "C#"));
                 }
             })));
             Parallel.Invoke(actions.ToArray());

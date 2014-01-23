@@ -21,7 +21,7 @@ namespace DataAccessLayer.Services
             return _dbCore.ExecuteReader<BillOfMaterials>("uspGetBillOfMaterials", 
                 DbParameters.Create(2)
                             .Set("StartProductID", startProductId)
-                            .Set("CheckDate", checkDate));
+                            .Set("CheckDate", checkDate)).ToList();
         }
 
         public Task<List<BillOfMaterials>> GetBillOfMaterialsAsync(int startProductId, DateTime checkDate)

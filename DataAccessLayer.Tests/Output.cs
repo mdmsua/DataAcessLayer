@@ -11,28 +11,24 @@ namespace DataAccessLayer.Tests
         [TestMethod]
         public void Write()
         {
-            using (var uow = new UnitOfWork("WriteOnly"))
+            var uow = new UnitOfWork("WriteOnly");
+            using (var trx = uow.BeginTransaction())
             {
-                using (var trx = uow.BeginTransaction())
-                {
-                    var value = 1L;
-                    uow.WriteOnly.Submit(ref value);
-                    Assert.AreEqual(DateTime.Now.Year, value);
-                }
+                var value = 1L;
+                uow.WriteOnly.Submit(ref value);
+                Assert.AreEqual(DateTime.Now.Year, value);
             }
         }
 
         [TestMethod]
         public void WriteValue()
         {
-            using (var uow = new UnitOfWork("WriteOnly"))
+            var uow = new UnitOfWork("WriteOnly");
+            using (var trx = uow.BeginTransaction())
             {
-                using (var trx = uow.BeginTransaction())
-                {
-                    var value = new WriteValue { Value = 1L };
-                    uow.WriteOnly.Submit(value);
-                    Assert.AreEqual(DateTime.Now.Year, value.Value);
-                }
+                var value = new WriteValue { Value = 1L };
+                uow.WriteOnly.Submit(value);
+                Assert.AreEqual(DateTime.Now.Year, value.Value);
             }
         }
     }

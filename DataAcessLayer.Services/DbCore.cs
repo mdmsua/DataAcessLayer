@@ -14,46 +14,30 @@ namespace DataAccessLayer.Services.Core
     {
         private readonly SqlDatabase _db;
 
+        private readonly DbConnection _connection;
+
         private DbTransaction transaction;
-
-        internal readonly Queue<string> Commands;
-
-        internal DbTransaction Transaction
-        {
-            private get
-            {
-                lock (this)
-                {
-                    return transaction;
-                }
-            }
-            set
-            {
-                lock (this)
-                {
-                    if (transaction != value)
-                    {
-                        lock (this)
-                        {
-                            transaction = value;
-                        }
-                    }
-                }
-            }
-        }
-
-        Boolean isPendingTransaction
-        {
-            get
-            {
-                return Transaction != null;
-            }
-        }
 
         public DbCore(SqlDatabase db)
         {
             _db = db;
-            Commands = new Queue<string>();
+            _connection = _db.CreateConnection();
+            if (_db.SupportsAsync)
+                _connection.OpenAsync().Wait();
+            else
+                _connection.Open();
+        }
+
+        public DbTransaction BeginTransaction()
+        {
+            transaction = _connection.BeginTransaction();
+            return transaction;
+        }
+
+        public DbTransaction BeginTransaction(IsolationLevel isolationLevel)
+        {
+            transaction = _connection.BeginTransaction(isolationLevel);
+            return transaction;
         }
 
         public T ExecuteScalar<T>(string procedure, DbParameters parameters)
@@ -63,47 +47,97 @@ namespace DataAccessLayer.Services.Core
             {
                 return (T)DoExecuteScalar(command);
             }
-            catch (NullReferenceException)
+            catch (Exception exception)
             {
-                return default(T);
+                throw new Exception(UnwrapCommand(command), exception);
+            }
+            finally
+            {
+                SetOutput(command, parameters);
             }
         }
 
         public Task<T> ExecuteScalarAsync<T>(string procedure, DbParameters parameters)
         {
             var command = PrepareCommand(procedure, parameters);
-            if (_db.SupportsAsync)
-                return DoExecuteScalarAsync(command).ContinueWith(t => (T)t.Result);
-            return Task.FromResult((T)DoExecuteScalar(command));
+            try
+            {
+                if (_db.SupportsAsync)
+                    return DoExecuteScalarAsync(command).ContinueWith(t => (T)t.Result);
+                return Task.FromResult((T)DoExecuteScalar(command));
+            }
+            catch (Exception exception)
+            {
+                throw new Exception(UnwrapCommand(command), exception);
+            }
+            finally
+            {
+                SetOutput(command, parameters);
+            }
         }
 
-        public T[] ExecuteReader<T>(string procedure, DbParameters parameters) where T : new()
+        public IEnumerable<T> ExecuteReader<T>(string procedure, DbParameters parameters) where T : new()
         {
-            LogCommand(procedure, parameters);
-            return _db.ExecuteSprocAccessor<T>(procedure, parameters.Values.ToArray()).ToArray();
+            try
+            {
+                if (transaction == null)
+                    return _db.ExecuteSprocAccessor<T>(procedure, parameters.Values.ToArray());
+                return ExecuteReaderInternal<T>(procedure, parameters);
+            }
+            catch (Exception exception)
+            {
+                throw new Exception(UnwrapParameters(procedure, parameters), exception);
+            }
         }
 
-        public Task<T[]> ExecuteReaderAsync<T>(string procedure, DbParameters parameters) where T : new()
+        public Task<IEnumerable<T>> ExecuteReaderAsync<T>(string procedure, DbParameters parameters) where T : new()
         {
             if (!_db.SupportsAsync) return Task.FromResult(ExecuteReader<T>(procedure, parameters));
-            LogCommand(procedure, parameters);
             var accessor = _db.CreateSprocAccessor<T>(procedure);
-            return Task.Factory.FromAsync<IEnumerable<T>>(accessor.BeginExecute(callback => { }, null, parameters.Values.ToArray()), accessor.EndExecute).ContinueWith(t => t.Result.ToArray());
+            try
+            {
+                return Task.Factory.FromAsync<IEnumerable<T>>(accessor.BeginExecute(callback => { }, null, parameters.Values.ToArray()), accessor.EndExecute);
+            }
+            catch (Exception exception)
+            {
+                throw new Exception(UnwrapParameters(procedure, parameters), exception);
+            }
         }
 
         public int ExecuteNonQuery(string procedure, DbParameters parameters)
         {
             var command = PrepareCommand(procedure, parameters);
-            var result = DoExecuteNonQuery(command);
-            SetOutput(command, parameters);
-            return result;
+            try
+            {
+
+                return DoExecuteNonQuery(command);
+            }
+            catch (Exception exception)
+            {
+                throw new Exception(UnwrapCommand(command), exception);
+            }
+            finally
+            {
+                SetOutput(command, parameters);
+            }
         }
 
         public Task<int> ExecuteNonQueryAsync(string procedure, DbParameters parameters)
         {
             if (!_db.SupportsAsync) return Task.FromResult(ExecuteNonQuery(procedure, parameters));
             var command = PrepareCommand(procedure, parameters);
-            return DoExecuteNonQueryAsync(command);
+            try
+            {
+                return DoExecuteNonQueryAsync(command);
+            }
+            catch (Exception exception)
+            {
+                throw new Exception(UnwrapCommand(command), exception);
+            }
+            finally
+            {
+                SetOutput(command, parameters);
+            }
         }
 
         private DbCommand PrepareCommand(string procedure, DbParameters parameters)
@@ -112,7 +146,6 @@ namespace DataAccessLayer.Services.Core
             if (_db.SupportsParemeterDiscovery)
                 _db.DiscoverParameters(command);
             SetParameters(command, parameters);
-            LogCommand(command);
             return command;
         }
 
@@ -120,83 +153,82 @@ namespace DataAccessLayer.Services.Core
         {
             foreach (var parameter in parameters)
             {
-                var parameterName = _db.BuildParameterName(parameter.Key);
-                if (command.Parameters.Contains(parameterName))
-                {
-                    DbType srcDbType, destDbType;
-                    destDbType = command.Parameters[parameterName].DbType;
-                    if (Enum.TryParse<DbType>(parameter.Value.GetType().Name, out srcDbType) && srcDbType == destDbType)
-                        _db.SetParameterValue(command, parameterName, parameter.Value);
-                    else
-                        throw new TypeMismatchException(command.CommandText, parameterName, destDbType.ToString(), srcDbType.ToString());
-                }
+                _db.SetParameterValue(command, _db.BuildParameterName(parameter.Key), parameter.Value);
             }
         }
 
         private void SetOutput(DbCommand command, DbParameters parameters)
         {
-            foreach (var parameter in parameters.ToList())
+            var commandParameters =
+                from DbParameter p in command.Parameters
+                where p.Direction == ParameterDirection.InputOutput || p.Direction == ParameterDirection.Output
+                select p;
+            foreach (var commandParameter in commandParameters)
             {
-                var parameterName = _db.BuildParameterName(parameter.Key);
-                if (command.Parameters.Contains(parameterName))
-                    parameters.Set(parameter.Key, command.Parameters[parameterName].Value, true);
+                var param = parameters.AsParallel().SingleOrDefault(p => string.Compare(_db.BuildParameterName(p.Key), commandParameter.ParameterName, true) == 0);
+                if (param.Key == null) continue;
+                parameters.Set(param.Key, param.Value, true);
             }
         }
 
         private IDataReader DoExecuteReader(DbCommand command)
         {
-            return isPendingTransaction ? _db.ExecuteReader(command, Transaction) : _db.ExecuteReader(command);
+            return transaction == null ? _db.ExecuteReader(command) : _db.ExecuteReader(command, transaction);
         }
 
         private int DoExecuteNonQuery(DbCommand command)
         {
-            return isPendingTransaction ? _db.ExecuteNonQuery(command, Transaction) : _db.ExecuteNonQuery(command);
+            return transaction == null ? _db.ExecuteNonQuery(command) : _db.ExecuteNonQuery(command, transaction);
         }
 
         private object DoExecuteScalar(DbCommand command)
         {
-            return isPendingTransaction ? _db.ExecuteScalar(command, Transaction) : _db.ExecuteScalar(command);
+            return transaction == null ? _db.ExecuteScalar(command) : _db.ExecuteScalar(command, transaction);
         }
 
         private Task<IDataReader> DoExecuteReaderAsync(DbCommand command)
         {
-            return isPendingTransaction ?
-                Task<IDataReader>.Factory.FromAsync<DbCommand, DbTransaction>(_db.BeginExecuteReader, _db.EndExecuteReader, command, Transaction, null) :
-                Task<IDataReader>.Factory.FromAsync<DbCommand>(_db.BeginExecuteReader, _db.EndExecuteReader, command, null);
+            return transaction == null ?
+                Task<IDataReader>.Factory.FromAsync<DbCommand>(_db.BeginExecuteReader, _db.EndExecuteReader, command, null) :
+                Task<IDataReader>.Factory.FromAsync<DbCommand, DbTransaction>(_db.BeginExecuteReader, _db.EndExecuteReader, command, transaction, null);
         }
 
         private Task<int> DoExecuteNonQueryAsync(DbCommand command)
         {
-            return isPendingTransaction ?
-                Task<int>.Factory.FromAsync<DbCommand, DbTransaction>(_db.BeginExecuteNonQuery, _db.EndExecuteNonQuery, command, Transaction, null) :
-                Task<int>.Factory.FromAsync<DbCommand>(_db.BeginExecuteNonQuery, _db.EndExecuteNonQuery, command, null);
+            return transaction == null ?
+                Task<int>.Factory.FromAsync<DbCommand>(_db.BeginExecuteNonQuery, _db.EndExecuteNonQuery, command, null) :
+                Task<int>.Factory.FromAsync<DbCommand, DbTransaction>(_db.BeginExecuteNonQuery, _db.EndExecuteNonQuery, command, transaction, null);
         }
 
         private Task<object> DoExecuteScalarAsync(DbCommand command)
         {
-            return isPendingTransaction ?
-                Task<object>.Factory.FromAsync<DbCommand, DbTransaction>(_db.BeginExecuteScalar, _db.EndExecuteScalar, command, Transaction, null) :
-                Task<object>.Factory.FromAsync<DbCommand>(_db.BeginExecuteScalar, _db.EndExecuteScalar, command, null);
+            return transaction == null ?
+                Task<object>.Factory.FromAsync<DbCommand>(_db.BeginExecuteScalar, _db.EndExecuteScalar, command, null) :
+                Task<object>.Factory.FromAsync<DbCommand, DbTransaction>(_db.BeginExecuteScalar, _db.EndExecuteScalar, command, transaction, null);
         }
 
-        private void LogCommand(DbCommand command)
+        private IEnumerable<T> ExecuteReaderInternal<T>(string procedure, DbParameters parameters) where T : new()
         {
-            if (isPendingTransaction)
-                Commands.Enqueue(UnwrapCommand(command));
+            var command = PrepareCommand(procedure, parameters);
+            var rowMapper = MapBuilder<T>.BuildAllProperties();
+            using (var reader = DoExecuteReader(command))
+            {
+                while (reader.Read())
+                {
+                    yield return rowMapper.MapRow(reader);
+                }
+            }
         }
 
         Func<DbCommand, String> UnwrapCommand = command => String.Format("EXECUTE {0} {1}",
-            command.CommandText,
-            String.Join(",", from DbParameter p in command.Parameters select String.Format("{0}={1}", p.ParameterName, p.Value)).TrimEnd(','));
+            command.CommandText, String.Join(", ",
+            from DbParameter p in command.Parameters
+            where p.Direction != ParameterDirection.ReturnValue
+            select String.Format("{0}='{1}'", p.ParameterName, p.Value ?? (p.SourceColumnNullMapping ? null : string.Empty))));
 
-        private void LogCommand(string procedure, DbParameters parameters)
-        {
-            if (isPendingTransaction)
-                Commands.Enqueue(Unwrap(procedure, parameters));
-        }
-
-        Func<String, DbParameters, String> Unwrap = (procedure, parameters) => String.Format("EXECUTE {0} {1}",
-            procedure,
-            String.Join(",", from p in parameters select p.Value).TrimEnd(','));
+        Func<String, DbParameters, String> UnwrapParameters = (procedure, parameters) => String.Format("EXECUTE {0} {1}",
+            procedure, String.Join(", ",
+            from p in parameters
+            select String.Format("{0}='{1}'", p.Key, p.Value)));
     }
 }
